@@ -1,0 +1,85 @@
+param kernel_width: u16;
+param num_elems: u16;
+
+const last_pe = kernel_width-1;
+const middle_pe = last_pe/2;
+
+// ID of color used for memcpy D2H transfer
+param MEMCPYD2H_DATA_1_ID: i16;
+param MEMCPYH2D_DATA_1_ID: i16;
+
+// Get D2H color from ID
+const MEMCPYD2H_DATA_1: color = @get_color(MEMCPYD2H_DATA_1_ID);
+const MEMCPYH2D_DATA_1: color = @get_color(MEMCPYH2D_DATA_1_ID);
+
+// Instantiate memcpy infrastructure
+const memcpy = @import_module("<memcpy_multi/get_params>", .{
+  .width = kernel_width,
+  .height = 1
+  });
+
+const color0 = @get_color(2);
+const color1 = @get_color(3);
+
+layout {
+  // Use a single row of 4 PEs (columns=4, rows=1)
+  @set_rectangle(kernel_width, 1);
+
+  // LEFT EDGE
+  ////////////
+  @set_tile_code(0, 0, "pe_left.csl", .{
+    .memcpyParams = memcpy.get_params(0), .num_elems = num_elems,
+    .MEMCPYD2H_DATA_1 = MEMCPYD2H_DATA_1, .MEMCPYH2D_DATA_1 = MEMCPYH2D_DATA_1,
+    .fab_send_color = color0,});
+
+  @set_color_config(0, 0, color0, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ EAST } }});
+
+  // MIDDLE
+  /////////
+  @set_tile_code(middle_pe, 0, "pe_middle.csl", .{
+    .memcpyParams = memcpy.get_params(middle_pe), .num_elems = num_elems,
+    .MEMCPYD2H_DATA_1 = MEMCPYD2H_DATA_1, .MEMCPYH2D_DATA_1 = MEMCPYH2D_DATA_1,
+    .recv_left_color = color0, .send_right_color = color1 });
+
+  @set_color_config(middle_pe, 0, color0, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ RAMP } }});
+  @set_color_config(middle_pe, 0, color1, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ EAST } }});
+
+  // RIGHT EDGE
+  /////////////
+  @set_tile_code(last_pe, 0, "pe_right.csl", .{
+    .memcpyParams = memcpy.get_params(last_pe), .num_elems = num_elems,
+    .MEMCPYD2H_DATA_1 = MEMCPYD2H_DATA_1, .MEMCPYH2D_DATA_1 = MEMCPYH2D_DATA_1,
+    .fab_recv_color = color1 });
+
+  @set_color_config(last_pe, 0, color1, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ RAMP } }});
+
+  // BETWEEN LEFT AND MIDDLE
+  //////////////////////////
+  var idx: u16 = 1;
+  while (idx < middle_pe) : (idx += 1) {
+    @set_tile_code(idx, 0, "noop.csl", .{
+      .memcpyParams = memcpy.get_params(idx),
+      .MEMCPYD2H_DATA_1 = MEMCPYD2H_DATA_1, .MEMCPYH2D_DATA_1 = MEMCPYH2D_DATA_1 });
+
+    @set_color_config(idx, 0, color0, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ EAST } }});
+  }
+
+  // BETWEEN MIDDLE AND RIGHT
+  ///////////////////////////
+  idx = middle_pe + 1;
+  while (idx < last_pe) : (idx += 1) {
+    @set_tile_code(idx, 0, "noop.csl", .{
+      .memcpyParams = memcpy.get_params(idx),
+      .MEMCPYD2H_DATA_1 = MEMCPYD2H_DATA_1, .MEMCPYH2D_DATA_1 = MEMCPYH2D_DATA_1 });
+
+    @set_color_config(idx, 0, color1, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ EAST } }});
+  }
+
+    // PE: 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8
+
+    // 0:  >     >     >     >     >
+    //     ^                       v
+
+    // 1:                          >     >     >     >     >
+    //                             ^                       v
+}

@@ -1,0 +1,63 @@
+param LAUNCH: color;
+param EXIT: color;
+param memcpyParams: comptime_struct; // Struct containing memcpy params
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{ 
+     .LAUNCH=LAUNCH,
+     .data_type=f32
+}));
+
+const task1_color: color = @get_color(8);
+const task2_color: color = @get_color(9);
+
+param num_elems: u16;
+
+param send_left_color: color;
+param recv_left_color: color;
+param send_right_color: color;
+param recv_right_color: color;
+
+var arr0 = @zeros([num_elems]f32);
+const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
+var ptr_arr0 : [*]f32 = &arr0;
+
+var arr1 = @zeros([num_elems]f32);
+const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
+var ptr_arr1 : [*]f32 = &arr1;
+
+const send_left_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_left_color, .extent = num_elems, .output_queue = 1});
+const recv_left_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_left_color, .extent = num_elems, .input_queue = @get_input_queue(2)});
+
+const send_right_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_right_color, .extent = num_elems, .output_queue = 3});
+const recv_right_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_right_color, .extent = num_elems, .input_queue = @get_input_queue(4)});
+
+task recv_task() void {
+  @fmovs(arr0_dsd, recv_left_dsd, .{.async = true, .unblock = shuffle_and_send});
+  @fmovs(arr1_dsd, recv_right_dsd, .{.async = true, .activate = shuffle_and_send});
+}
+
+task shuffle_and_send() void {
+  @fmovs(send_left_dsd, arr1_dsd, .{.async = true});
+  @fmovs(send_right_dsd, arr0_dsd, .{.async = true});
+}
+
+fn main_fn() void {
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  @bind_task(recv_task, task1_color);
+  @activate(task1_color);
+
+  @bind_task(shuffle_and_send, task2_color);
+  @block(task2_color);
+
+  @block(recv_left_color);
+  @block(recv_right_color);
+
+  @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(main_fn);
+  @rpc(LAUNCH);
+}

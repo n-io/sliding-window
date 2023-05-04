@@ -1,0 +1,40 @@
+param MEMCPYD2H_DATA_1: color;       // Color used for D2H memcpy transfer
+param MEMCPYH2D_DATA_1: color;       // Color used for H2D memcpy transfer
+param memcpyParams: comptime_struct; // Struct containing memcpy params
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
+     .MEMCPYD2H_1=MEMCPYD2H_DATA_1,
+     .MEMCPYH2D_1=MEMCPYH2D_DATA_1
+}));
+
+const task1_color: color = @get_color(8);
+const task2_color: color = @get_color(9);
+
+param num_elems: u16;
+
+param recv_left_color: color;
+param send_right_color: color;
+
+var arr = @zeros([num_elems]i32);
+const arr_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr[i] });
+
+const recv_left_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_left_color, .extent = num_elems, .input_queue = @get_input_queue(1)});
+const send_right_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_right_color, .extent = num_elems, .output_queue = 2});
+
+task recv_task() void {
+  @fmovs(arr_dsd, recv_left_dsd, .{.async = true, .activate = shuffle_and_send});
+}
+
+task shuffle_and_send() void {
+  @fmovs(send_right_dsd, arr_dsd, .{.async = true});
+}
+
+comptime {
+  @bind_task(recv_task, task1_color);
+  @activate(task1_color);
+
+  @bind_task(shuffle_and_send, task2_color);
+
+  @block(recv_left_color);
+}

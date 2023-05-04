@@ -1,0 +1,51 @@
+const main_color: color = @get_color(8);
+const finalize_color: color = @get_color(9);
+
+param num_elems: u16;
+param fab_send_color: color;
+param fab_recv_color: color;
+
+param LAUNCH: color;
+param EXIT: color;
+param memcpyParams: comptime_struct; // Struct containing memcpy params
+
+var arr0 = @zeros([num_elems]f32);
+const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
+var ptr_arr0 : [*]f32 = &arr0;
+
+var arr1 = @zeros([num_elems]f32);
+const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
+var ptr_arr1 : [*]f32 = &arr1;
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
+     .LAUNCH=LAUNCH,
+     .data_type=f32
+}));
+
+// first PE sends to the right; last PE sends to the left
+const send_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_send_color, .extent = num_elems, .output_queue = 1});
+const recv_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_recv_color, .extent = num_elems, .input_queue = @get_input_queue(2)});
+
+fn main_fn() void {
+  @fmovs(arr0_dsd, 2.0);
+  @fmovs(arr1_dsd, 3.0);
+  @fmovs(send_dsd, arr0_dsd, .{.async = true});
+  @fmovs(recv_dsd, arr1_dsd, .{.async = true, .activate = EXIT});
+}
+
+task f_exit() void {
+  // the user must unblock cmd color for every PE
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  @bind_task(f_exit, EXIT);
+
+  @block(fab_recv_color);
+
+  @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(main_fn);
+  @rpc(LAUNCH);
+}

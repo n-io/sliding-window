@@ -1,0 +1,4 @@
+**/simfab_traces
+**/*.json
+**/out
+**/*.log

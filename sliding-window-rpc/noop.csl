@@ -1,0 +1,26 @@
+param LAUNCH: color;
+param EXIT: color;
+param memcpyParams: comptime_struct; // Struct containing memcpy params
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
+     .LAUNCH=LAUNCH,
+     .data_type=f32
+}));
+
+var arr0 = @zeros([num_elems]f32);
+var ptr_arr0 : [*]f32 = &arr0;
+
+var arr1 = @zeros([num_elems]f32);
+var ptr_arr1 : [*]f32 = &arr1;
+
+fn main_fn() void {
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(main_fn);
+  @rpc(LAUNCH);
+}
