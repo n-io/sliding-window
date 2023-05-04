@@ -52,4 +52,5 @@ runner.memcpy_d2h(out_data, arr0_symbol, 0, 0, kernel_width, 1, num_elems,
 # Stop the program
 runner.stop()
 
+print("hello...")
 print(out_data)

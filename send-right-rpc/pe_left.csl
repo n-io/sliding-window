@@ -19,7 +19,7 @@ const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyPa
 }));
 
 // first PE sends to the right; last PE sends to the left
-const send_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_send_color, .extent = num_elems, .output_queue = 0});
+const send_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_send_color, .extent = num_elems, .output_queue = 1});
 
 fn main_fn() void {
   @fmovs(send_dsd, arr0_dsd, .{.async = true, .activate = EXIT});
