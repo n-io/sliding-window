@@ -8,6 +8,13 @@ const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyPa
      .data_type=f32
 }));
 
+const timestamp = @import_module("<time>");
+var tscEndBuffer = @zeros([timestamp.tsc_size_words]u16);
+var tscStartBuffer = @zeros([timestamp.tsc_size_words]u16);
+
+var d2h_buf_f32 = @zeros([3]f32);
+var ptr_d2h_buf_f32 : [*]f32 = &d2h_buf_f32;
+
 const task1_color: color = @get_color(8);
 
 param num_elems: u16;
@@ -32,7 +39,9 @@ const send_right_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_right_color, 
 const recv_right_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_right_color, .extent = num_elems, .input_queue = @get_input_queue(4)});
 
 fn main_fn() void {
-  //sys_mod.unblock_cmd_stream();
+  timestamp.enable_tsc();
+  timestamp.get_timestamp(&tscStartBuffer);
+
   @fmovs(arr0_dsd, recv_left_dsd, .{.async = true, .unblock = shuffle_and_send});
   @fmovs(arr1_dsd, recv_right_dsd, .{.async = true, .activate = shuffle_and_send});
 }
@@ -43,6 +52,25 @@ task shuffle_and_send() void {
 }
 
 task f_exit() void {
+  timestamp.get_timestamp(&tscEndBuffer);
+  timestamp.disable_tsc();
+
+  var lo_ : u16 = 0;
+  var hi_ : u16 = 0;
+  var word : u32 = 0;
+
+  lo_ = tscStartBuffer[0];
+  hi_ = tscStartBuffer[1];
+  d2h_buf_f32[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tscStartBuffer[2];
+  hi_ = tscEndBuffer[0];
+  d2h_buf_f32[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tscEndBuffer[1];
+  hi_ = tscEndBuffer[2];
+  d2h_buf_f32[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
   sys_mod.unblock_cmd_stream();
 }
 
@@ -58,6 +86,7 @@ comptime {
 
   @export_symbol(ptr_arr0, "arr0");
   @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(ptr_d2h_buf_f32, "maxmin_time");
   @export_symbol(main_fn);
   @rpc(LAUNCH);
 }
