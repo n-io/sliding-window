@@ -9,7 +9,6 @@ const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyPa
 }));
 
 const task1_color: color = @get_color(8);
-const task2_color: color = @get_color(9);
 
 param num_elems: u16;
 
@@ -32,26 +31,26 @@ const recv_left_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_left_color, .e
 const send_right_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_right_color, .extent = num_elems, .output_queue = 3});
 const recv_right_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_right_color, .extent = num_elems, .input_queue = @get_input_queue(4)});
 
-task recv_task() void {
+fn main_fn() void {
   @fmovs(arr0_dsd, recv_left_dsd, .{.async = true, .unblock = shuffle_and_send});
   @fmovs(arr1_dsd, recv_right_dsd, .{.async = true, .activate = shuffle_and_send});
 }
 
 task shuffle_and_send() void {
-  @fmovs(send_left_dsd, arr1_dsd, .{.async = true});
-  @fmovs(send_right_dsd, arr0_dsd, .{.async = true});
+  @fmovs(send_left_dsd, arr1_dsd, .{.async = true, .unblock = EXIT});
+  @fmovs(send_right_dsd, arr0_dsd, .{.async = true, .activate = EXIT});
 }
 
-fn main_fn() void {
+task f_exit() void {
   sys_mod.unblock_cmd_stream();
 }
 
 comptime {
-  @bind_task(recv_task, task1_color);
-  @activate(task1_color);
+  @bind_task(shuffle_and_send, task1_color);
+  @bind_task(f_exit, EXIT);
 
-  @bind_task(shuffle_and_send, task2_color);
-  @block(task2_color);
+  @block(task1_color);
+  @block(EXIT);
 
   @block(recv_left_color);
   @block(recv_right_color);

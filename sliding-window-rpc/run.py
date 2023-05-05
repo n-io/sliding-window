@@ -34,9 +34,15 @@ memcpy_order = MemcpyOrder.ROW_MAJOR
 runner.load()
 runner.run()
 
-runner.call("main_fn", [], nonblock=True)
+print("make it here?")
+
+runner.call("main_fn", [], nonblock=False)
+
+print("make it here?")
 
 out_data = np.zeros([kernel_width*num_elems], dtype=np.int32)
+
+print("make it here?")
 
 runner.memcpy_d2h(out_data, arr0_symbol, 0, 0, kernel_width, 1, num_elems,
                   streaming=False, data_type=memcpy_dtype,

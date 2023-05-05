@@ -2,6 +2,8 @@ param LAUNCH: color;
 param EXIT: color;
 param memcpyParams: comptime_struct; // Struct containing memcpy params
 
+param num_elems: u16;
+
 // This module is needed for memcpy infrastructure
 const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
      .LAUNCH=LAUNCH,

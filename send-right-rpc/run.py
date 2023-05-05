@@ -34,6 +34,8 @@ runner.load()
 runner.run()
 
 in_data = np.arange(num_elems*kernel_width, dtype=np.float32)
+in_data[0] = 5
+in_data[1] = 4
 
 print(in_data)
 
@@ -47,7 +49,7 @@ out_data = np.zeros([num_elems*kernel_width], dtype=np.float32)
 
 runner.memcpy_d2h(out_data, arr0_symbol, 0, 0, kernel_width, 1, num_elems,
                   streaming=False, data_type=memcpy_dtype,
-                  order=memcpy_order, nonblock=True)
+                  order=memcpy_order, nonblock=False)
 
 # Stop the program
 runner.stop()
