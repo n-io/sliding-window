@@ -32,6 +32,7 @@ const send_right_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_right_color, 
 const recv_right_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_right_color, .extent = num_elems, .input_queue = @get_input_queue(4)});
 
 fn main_fn() void {
+  //sys_mod.unblock_cmd_stream();
   @fmovs(arr0_dsd, recv_left_dsd, .{.async = true, .unblock = shuffle_and_send});
   @fmovs(arr1_dsd, recv_right_dsd, .{.async = true, .activate = shuffle_and_send});
 }

@@ -1,3 +1,4 @@
+param num_elems: u16;
 param LAUNCH: color;
 param EXIT: color;
 param memcpyParams: comptime_struct; // Struct containing memcpy params

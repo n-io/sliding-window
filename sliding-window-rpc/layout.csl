@@ -66,6 +66,7 @@ layout {
   var idx: u16 = 1;
   while (idx < middle_pe) : (idx += 1) {
     @set_tile_code(idx, 0, "noop.csl", .{
+      .num_elems = num_elems,
       .memcpyParams = memcpy.get_params(idx),
       .LAUNCH=LAUNCH, .EXIT=EXIT });
 
@@ -78,6 +79,7 @@ layout {
   idx = middle_pe + 1;
   while (idx < last_pe) : (idx += 1) {
     @set_tile_code(idx, 0, "noop.csl", .{
+      .num_elems = num_elems,
       .memcpyParams = memcpy.get_params(idx),
       .LAUNCH=LAUNCH, .EXIT=EXIT });
 

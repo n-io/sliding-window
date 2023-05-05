@@ -23,15 +23,15 @@ const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyPa
      .data_type=f32
 }));
 
+const layout_module = @import_module("<layout>");
+
 // first PE sends to the right; last PE sends to the left
 const send_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_send_color, .extent = num_elems, .output_queue = 1});
 const recv_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_recv_color, .extent = num_elems, .input_queue = @get_input_queue(2)});
 
 fn main_fn() void {
-  @fmovs(arr0_dsd, 2.0);
-  @fmovs(arr1_dsd, 3.0);
   @fmovs(send_dsd, arr0_dsd, .{.async = true});
-  @fmovs(recv_dsd, arr1_dsd, .{.async = true, .activate = EXIT});
+  @fmovs(arr1_dsd, recv_dsd, .{.async = true, .activate = EXIT});
 }
 
 task f_exit() void {
