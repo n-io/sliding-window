@@ -148,6 +148,7 @@ def main():
     print("Left:   ", left_cycles)
     print("Middle: ", middle_cycles)
     print("Right:  ", right_cycles)
+    print()
     
     # Write a CSV
     if cmaddr:

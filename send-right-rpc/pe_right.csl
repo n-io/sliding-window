@@ -18,16 +18,45 @@ const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyPa
      .data_type=f32
 }));
 
+const timestamp = @import_module("<time>");
+var tscEndBuffer = @zeros([timestamp.tsc_size_words]u16);
+var tscStartBuffer = @zeros([timestamp.tsc_size_words]u16);
+
+var d2h_buf_f32 = @zeros([3]f32);
+var ptr_d2h_buf_f32 : [*]f32 = &d2h_buf_f32;
+
 // first PE sends to the right; last PE sends to the left
 const recv_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_recv_color, .extent = num_elems, .input_queue = @get_input_queue(1)});
 
 fn main_fn() void {
+  timestamp.enable_tsc();
+  timestamp.get_timestamp(&tscStartBuffer);
+
   @fmovs(arr0_dsd, recv_dsd, .{.async = true, .activate = EXIT});
 }
 
 task f_exit() void {
   // the user must unblock cmd color for every PE
   sys_mod.unblock_cmd_stream();
+
+  timestamp.get_timestamp(&tscEndBuffer);
+  timestamp.disable_tsc();
+
+  var lo_ : u16 = 0;
+  var hi_ : u16 = 0;
+  var word : u32 = 0;
+
+  lo_ = tscStartBuffer[0];
+  hi_ = tscStartBuffer[1];
+  d2h_buf_f32[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tscStartBuffer[2];
+  hi_ = tscEndBuffer[0];
+  d2h_buf_f32[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tscEndBuffer[1];
+  hi_ = tscEndBuffer[2];
+  d2h_buf_f32[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
 }
 
 comptime {
@@ -36,6 +65,7 @@ comptime {
   @block(fab_recv_color);
 
   @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_d2h_buf_f32, "maxmin_time");
   @export_symbol(main_fn);
   @rpc(LAUNCH);
 }
