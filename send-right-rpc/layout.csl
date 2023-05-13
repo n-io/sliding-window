@@ -64,7 +64,7 @@ layout {
   ///////////////////////////
   idx = middle_pe + 1;
   while (idx < last_pe) : (idx += 1) {
-    @set_tile_code(idx, 0, "noop.csl", .{
+    @set_tile_code(idx, 0, "pe_noop.csl", .{
       .memcpyParams = memcpy.get_params(idx), .num_elems = num_elems,
       .LAUNCH=LAUNCH, .EXIT=EXIT });
 
