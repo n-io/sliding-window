@@ -4,13 +4,9 @@ param num_elems: u16;
 const last_pe = kernel_width-1;
 const middle_pe = last_pe/2;
 
-// ID of color used for memcpy D2H transfer
-param LAUNCH_ID: i16;
-param EXIT_ID: i16;
-
 // Get D2H color from ID
-const LAUNCH: color = @get_color(LAUNCH_ID);
-const EXIT: color = @get_color(EXIT_ID);
+const LAUNCH: color = @get_color(0);
+const EXIT: color = @get_color(1);
 
 // Instantiate memcpy infrastructure
 const memcpy = @import_module("<memcpy_multi/get_params>", .{
@@ -65,7 +61,7 @@ layout {
   //////////////////////////
   var idx: u16 = 1;
   while (idx < middle_pe) : (idx += 1) {
-    @set_tile_code(idx, 0, "noop.csl", .{
+    @set_tile_code(idx, 0, "pe_noop.csl", .{
       .num_elems = num_elems,
       .memcpyParams = memcpy.get_params(idx),
       .LAUNCH=LAUNCH, .EXIT=EXIT });
@@ -78,7 +74,7 @@ layout {
   ///////////////////////////
   idx = middle_pe + 1;
   while (idx < last_pe) : (idx += 1) {
-    @set_tile_code(idx, 0, "noop.csl", .{
+    @set_tile_code(idx, 0, "pe_noop.csl", .{
       .num_elems = num_elems,
       .memcpyParams = memcpy.get_params(idx),
       .LAUNCH=LAUNCH, .EXIT=EXIT });
