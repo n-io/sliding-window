@@ -85,15 +85,13 @@ def main():
   name = args.name # compilation output
   cmaddr = args.cmaddr
 
-  #for kernel_width in range(3,750,50):
-    #for num_elems in range(1,101,10):
-  kernel_width=703
-  for num_elems in range(71, 101, 10): 
-    compile_and_run(
-      kernel_width,
-      num_elems,
-      name,
-      cmaddr)
+  for kernel_width in range(3,750,100):
+    for num_elems in range(1,101,10):
+      compile_and_run(
+        kernel_width,
+        num_elems,
+        name,
+        cmaddr)
 
 
 if __name__ == "__main__":

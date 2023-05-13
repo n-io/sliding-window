@@ -24,9 +24,9 @@ cs2 = args.cs2
 ####
 
 if cs2:
-  csv_name = test_name + '_cs2.csv'
+  csv_name = 'out_cs2.csv'
 else:
-  csv_name = test_name + '_sim.csv'
+  csv_name = 'out_sim.csv'
 
 df = pd.read_csv(csv_name)
 
@@ -44,7 +44,7 @@ num_elems = list(dict.fromkeys(df['num_elems'].to_list()))
 for num_elem in num_elems:
   left_cycles = df.loc[df['num_elems'] == num_elem, 'left_cycles']
   kernel_width = df.loc[df['num_elems'] == num_elem, 'kernel_width']
-  plt.plot(kernel_width, left_cycles, label=num_elem)
+  plt.plot(kernel_width, left_cycles, '-o', label=num_elem)
 
 plt.legend(bbox_to_anchor=(1.05, 1.05))
 plt.grid()
