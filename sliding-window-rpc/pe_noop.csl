@@ -1,26 +1,28 @@
 param num_elems: u16;
-param LAUNCH: color;
-param EXIT: color;
-param memcpyParams: comptime_struct; // Struct containing memcpy params
+
+param memcpy_params: comptime_struct; // Struct containing memcpy params
+
+const LAUNCH: color = @get_color(0);
+const EXIT: color = @get_color(1);
 
 // This module is needed for memcpy infrastructure
-const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpy_params, .{
      .LAUNCH=LAUNCH,
      .data_type=f32
 }));
 
 const timestamp = @import_module("<time>");
-var tscEndBuffer = @zeros([timestamp.tsc_size_words]u16);
-var tscStartBuffer = @zeros([timestamp.tsc_size_words]u16);
+var tsc_end_buf = @zeros([timestamp.tsc_size_words]u16);
+var tsc_start_buf = @zeros([timestamp.tsc_size_words]u16);
+
+var timer_buf = @zeros([3]f32);
+var ptr_timer_buf : [*]f32 = &timer_buf;
 
 var arr0 = @zeros([num_elems]f32);
 var ptr_arr0 : [*]f32 = &arr0;
 
 var arr1 = @zeros([num_elems]f32);
 var ptr_arr1 : [*]f32 = &arr1;
-
-var d2h_buf_f32 = @zeros([3]f32);
-var ptr_d2h_buf_f32 : [*]f32 = &d2h_buf_f32;
 
 fn main_fn() void {
   sys_mod.unblock_cmd_stream();
@@ -29,7 +31,7 @@ fn main_fn() void {
 comptime {
   @export_symbol(ptr_arr0, "arr0");
   @export_symbol(ptr_arr1, "arr1");
-  @export_symbol(ptr_d2h_buf_f32, "maxmin_time");
+  @export_symbol(ptr_timer_buf, "maxmin_time");
   @export_symbol(main_fn);
   @rpc(LAUNCH);
 }

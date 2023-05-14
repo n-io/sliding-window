@@ -4,10 +4,6 @@ param num_elems: u16;
 const last_pe = kernel_width-1;
 const middle_pe = last_pe/2;
 
-// Get D2H color from ID
-const LAUNCH: color = @get_color(0);
-const EXIT: color = @get_color(1);
-
 // Instantiate memcpy infrastructure
 const memcpy = @import_module("<memcpy_multi/get_params>", .{
   .width = kernel_width,
@@ -20,14 +16,13 @@ const color2 = @get_color(4);
 const color3 = @get_color(5);
 
 layout {
-  // Use a single row of 4 PEs (columns=4, rows=1)
+  // Use a single row of kernel_width PEs (columns=kernel_width, rows=1)
   @set_rectangle(kernel_width, 1);
 
   // LEFT EDGE
   ////////////
   @set_tile_code(0, 0, "pe_edge.csl", .{
-    .memcpyParams = memcpy.get_params(0), .num_elems = num_elems,
-    .LAUNCH=LAUNCH, .EXIT=EXIT,
+    .memcpy_params = memcpy.get_params(0), .num_elems = num_elems,
     .fab_send_color = color0, .fab_recv_color = color1 });
 
   @set_color_config(0, 0, color0, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ EAST } }});
@@ -36,8 +31,7 @@ layout {
   // RIGHT EDGE
   /////////////
   @set_tile_code(last_pe, 0, "pe_edge.csl", .{
-    .memcpyParams = memcpy.get_params(last_pe), .num_elems = num_elems,
-    .LAUNCH=LAUNCH, .EXIT=EXIT,
+    .memcpy_params = memcpy.get_params(last_pe), .num_elems = num_elems,
     .fab_send_color = color2, .fab_recv_color = color3 });
 
   @set_color_config(last_pe, 0, color2, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ WEST } }});
@@ -49,8 +43,7 @@ layout {
     .num_elems = num_elems,
     .recv_left_color = color0, .send_left_color = color1,
     .recv_right_color = color2, .send_right_color = color3,
-    .memcpyParams = memcpy.get_params(middle_pe),
-    .LAUNCH=LAUNCH, .EXIT=EXIT });
+    .memcpy_params = memcpy.get_params(middle_pe) });
 
   @set_color_config(middle_pe, 0, color0, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ RAMP } }});
   @set_color_config(middle_pe, 0, color1, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ WEST } }});
@@ -63,8 +56,7 @@ layout {
   while (idx < middle_pe) : (idx += 1) {
     @set_tile_code(idx, 0, "pe_noop.csl", .{
       .num_elems = num_elems,
-      .memcpyParams = memcpy.get_params(idx),
-      .LAUNCH=LAUNCH, .EXIT=EXIT });
+      .memcpy_params = memcpy.get_params(idx) });
 
     @set_color_config(idx, 0, color0, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ EAST } }});
     @set_color_config(idx, 0, color1, .{ .routes = .{ .rx = .{ EAST }, .tx = .{ WEST } }});
@@ -76,8 +68,7 @@ layout {
   while (idx < last_pe) : (idx += 1) {
     @set_tile_code(idx, 0, "pe_noop.csl", .{
       .num_elems = num_elems,
-      .memcpyParams = memcpy.get_params(idx),
-      .LAUNCH=LAUNCH, .EXIT=EXIT });
+      .memcpy_params = memcpy.get_params(idx) });
 
     @set_color_config(idx, 0, color2, .{ .routes = .{ .rx = .{ EAST }, .tx = .{ WEST } }});
     @set_color_config(idx, 0, color3, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ EAST } }});

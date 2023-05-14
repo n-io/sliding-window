@@ -1,22 +1,3 @@
-param LAUNCH: color;
-param EXIT: color;
-param memcpyParams: comptime_struct; // Struct containing memcpy params
-
-// This module is needed for memcpy infrastructure
-const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{ 
-     .LAUNCH=LAUNCH,
-     .data_type=f32
-}));
-
-const timestamp = @import_module("<time>");
-var tscEndBuffer = @zeros([timestamp.tsc_size_words]u16);
-var tscStartBuffer = @zeros([timestamp.tsc_size_words]u16);
-
-var d2h_buf_f32 = @zeros([3]f32);
-var ptr_d2h_buf_f32 : [*]f32 = &d2h_buf_f32;
-
-const task1_color: color = @get_color(8);
-
 param num_elems: u16;
 
 param send_left_color: color;
@@ -24,6 +5,27 @@ param recv_left_color: color;
 param send_right_color: color;
 param recv_right_color: color;
 
+param memcpy_params: comptime_struct; // Struct containing memcpy params
+
+const LAUNCH: color = @get_color(0);
+const EXIT: color = @get_color(1);
+const main_color: color = @get_color(8);
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpy_params, .{ 
+     .LAUNCH=LAUNCH,
+     .data_type=f32
+}));
+
+// Timers
+const timestamp = @import_module("<time>");
+var tsc_end_buf = @zeros([timestamp.tsc_size_words]u16);
+var tsc_start_buf = @zeros([timestamp.tsc_size_words]u16);
+
+var timer_buf = @zeros([3]f32);
+var ptr_timer_buf : [*]f32 = &timer_buf;
+
+// Arrays for sliding data across fabric
 var arr0 = @zeros([num_elems]f32);
 const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
 var ptr_arr0 : [*]f32 = &arr0;
@@ -40,45 +42,49 @@ const recv_right_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_right_color, 
 
 fn main_fn() void {
   timestamp.enable_tsc();
-  timestamp.get_timestamp(&tscStartBuffer);
+  timestamp.get_timestamp(&tsc_start_buf);
 
   @fmovs(arr0_dsd, recv_left_dsd, .{.async = true, .unblock = shuffle_and_send});
   @fmovs(arr1_dsd, recv_right_dsd, .{.async = true, .activate = shuffle_and_send});
 }
 
+// Activated after all data has been received from left and right
 task shuffle_and_send() void {
   @fmovs(send_left_dsd, arr1_dsd, .{.async = true, .unblock = EXIT});
   @fmovs(send_right_dsd, arr0_dsd, .{.async = true, .activate = EXIT});
 }
 
+// Activated after all data has been sent to left and right
 task f_exit() void {
-  timestamp.get_timestamp(&tscEndBuffer);
+  // stop the timer
+  timestamp.get_timestamp(&tsc_end_buf);
   timestamp.disable_tsc();
 
   var lo_ : u16 = 0;
   var hi_ : u16 = 0;
   var word : u32 = 0;
 
-  lo_ = tscStartBuffer[0];
-  hi_ = tscStartBuffer[1];
-  d2h_buf_f32[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+  lo_ = tsc_start_buf[0];
+  hi_ = tsc_start_buf[1];
+  timer_buf[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
 
-  lo_ = tscStartBuffer[2];
-  hi_ = tscEndBuffer[0];
-  d2h_buf_f32[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+  lo_ = tsc_start_buf[2];
+  hi_ = tsc_end_buf[0];
+  timer_buf[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
 
-  lo_ = tscEndBuffer[1];
-  hi_ = tscEndBuffer[2];
-  d2h_buf_f32[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+  lo_ = tsc_end_buf[1];
+  hi_ = tsc_end_buf[2];
+  timer_buf[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
 
+  // the user must unblock cmd color for every PE
   sys_mod.unblock_cmd_stream();
 }
 
 comptime {
-  @bind_task(shuffle_and_send, task1_color);
+  @bind_task(shuffle_and_send, main_color);
   @bind_task(f_exit, EXIT);
 
-  @block(task1_color);
+  @block(main_color);
   @block(EXIT);
 
   @block(recv_left_color);
@@ -86,7 +92,7 @@ comptime {
 
   @export_symbol(ptr_arr0, "arr0");
   @export_symbol(ptr_arr1, "arr1");
-  @export_symbol(ptr_d2h_buf_f32, "maxmin_time");
+  @export_symbol(ptr_timer_buf, "maxmin_time");
   @export_symbol(main_fn);
   @rpc(LAUNCH);
 }
