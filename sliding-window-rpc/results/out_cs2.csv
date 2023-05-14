@@ -1,3 +1,4 @@
+kernel_width,num_elems,left_cycles,middle_cycles,right_cycles,walltime
 3,1,41,37,44,59.78669047355652
 3,11,119,110,96,80.99500918388367
 3,21,189,178,141,80.9836266040802
