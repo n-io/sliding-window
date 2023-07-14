@@ -1,0 +1,55 @@
+// These are switch commands that tell the receiving router to either do nothing
+// or advance the switch position.
+const sw_nop = 0;
+const sw_adv = 1;
+const sw_reset = 2;
+
+// This function computes the payload field of the control wavelet.  The `cmds`
+// argument contains the switch commands for seven downstream PEs.
+fn ctrl(cmds: [8]u16) u32 {
+  // Tell the router to not forward control wavelets to the PE.
+  const ceFilter = true;
+
+  // Color 31 is special.  It is the hardware's way of saying null color.
+  const colorToActivate = 31;
+
+  var result: u32 = 0;
+  result |= (colorToActivate & 0x1f) << 16;
+
+  result |= @as(u32, cmds[0] & 0b11) << 22;
+  result |= @as(u32, ceFilter) << 24;
+
+  result |= @as(u32, cmds[1] & 0b11) << 25;
+  result |= @as(u32, ceFilter) << 27;
+
+  result |= @as(u32, cmds[2] & 0b11) << 28;
+  result |= @as(u32, ceFilter) << 0;
+
+  result |= @as(u32, cmds[3] & 0b11) << 1;
+  result |= @as(u32, ceFilter) << 3;
+
+  result |= @as(u32, cmds[4] & 0b11) << 4;
+  result |= @as(u32, ceFilter) << 6;
+
+  result |= @as(u32, cmds[5] & 0b11) << 7;
+  result |= @as(u32, ceFilter) << 9;
+
+  result |= @as(u32, cmds[6] & 0b11) << 10;
+  result |= @as(u32, ceFilter) << 12;
+
+  result |= @as(u32, cmds[7] & 0b11) << 13;
+  result |= @as(u32, ceFilter) << 15;
+
+  return result;
+}
+
+// switch commands for 8 PEs
+// current PE is advanced from |- to --
+// next PE is advanced from -- to -|
+// other PEs don't matter
+fn switchCommands() [8]u16 {
+  var cmds = @constants([8]u16, sw_nop);
+  cmds[0] = sw_adv;
+  cmds[1] = sw_adv;
+  return cmds;
+}

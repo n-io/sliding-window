@@ -1,0 +1,165 @@
+param num_elems: u16;
+param num_pes: u16;
+param pe_id: u16;
+
+const half_pes = num_pes / 2;
+const num_slide = num_pes / 4;
+
+param fab_east_color: color;
+param fab_west_color: color;
+
+param memcpy_params: comptime_struct; // Struct containing memcpy params
+
+const LAUNCH: color = @get_color(8);
+const EXIT: color = @get_color(9);
+const send_west_ctrl: color = @get_color(10);
+const send_east_ctrl: color = @get_color(11);
+const recv_west: color = @get_color(12);
+const recv_east: color = @get_color(13);
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpy_params, .{
+     .LAUNCH=LAUNCH,
+     .data_type=f32
+}));
+
+const switches = @import_module("switches.csl");
+
+// Timers
+const timestamp = @import_module("<time>");
+var tsc_end_buf = @zeros([timestamp.tsc_size_words]u16);
+var tsc_start_buf = @zeros([timestamp.tsc_size_words]u16);
+
+var timer_buf = @zeros([3]f32);
+var ptr_timer_buf : [*]f32 = &timer_buf;
+
+// Arrays for sliding data across fabric
+var arr0 = @zeros([num_elems]f32);
+const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
+var ptr_arr0 : [*]f32 = &arr0;
+
+var arr1 = @zeros([num_elems]f32);
+const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
+var ptr_arr1 : [*]f32 = &arr1;
+
+var arr2 = @zeros([num_elems]f32);
+const arr2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr2[i] });
+var ptr_arr2 : [*]f32 = &arr2;
+
+const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = @get_output_queue(2) });
+const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = @get_input_queue(3) });
+
+const send_west_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_west_color, .extent = num_elems, .output_queue = @get_output_queue(4) });
+const recv_east_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_west_color, .extent = num_elems, .input_queue = @get_input_queue(5) });
+
+fn main_fn() void {
+  timestamp.enable_tsc();
+  timestamp.get_timestamp(&tsc_start_buf);
+
+  // Every PE in left half sends right
+  if (pe_id < half_pes) {
+    @fmovs(send_east_dsd, arr0_dsd, .{.async = true, .activate = send_east_ctrl});
+  // These PEs will receive but not send
+  } else if (pe_id < half_pes + num_slide) {
+    @activate(recv_west);
+  } else {
+    @unblock(EXIT);
+  }
+
+  // Every PE in right half sends left
+  if (pe_id >= half_pes) {
+    @fmovs(send_west_dsd, arr0_dsd, .{.async = true, .activate = send_west_ctrl});
+  // These PEs will receive but not send
+  } else if (pe_id >= num_slide) {
+    @activate(recv_east);
+  } else {
+    @activate(EXIT);
+  }
+}
+
+const ctrl = [1]u32 { comptime switches.ctrl(switches.switchCommands()) };
+const ctrl_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> ctrl[i] });
+
+task send_east_ctrl_wlt() void {
+  const fabOutCtrlDsd = @get_dsd(fabout_dsd, .{
+      .extent = 1,
+      .control = true,
+      .fabric_color = fab_east_color,
+      .output_queue = @get_output_queue(2),
+      });
+
+  @mov32(fabOutCtrlDsd, ctrl_dsd, .{ .async = true, .activate = recv_west});
+}
+
+task send_west_ctrl_wlt() void {
+  const fabOutCtrlDsd = @get_dsd(fabout_dsd, .{
+      .extent = 1,
+      .control = true,
+      .fabric_color = fab_west_color,
+      .output_queue = @get_output_queue(4),
+      });
+
+  @mov32(fabOutCtrlDsd, ctrl_dsd, .{ .async = true, .activate = recv_east});
+}
+
+task recv_west_task() void {
+  if (pe_id >= num_slide) {
+    @fmovs(arr1_dsd, recv_west_dsd, .{.async = true, .unblock = EXIT});
+  } else {
+    @unblock(EXIT);
+  }
+}
+
+task recv_east_task() void {
+  if (pe_id < half_pes + num_slide) {
+    @fmovs(arr2_dsd, recv_east_dsd, .{.async = true, .activate = EXIT});
+  } else {
+    @activate(EXIT);
+  }
+}
+
+// Activated only after all data has been received
+task f_exit() void {
+  // stop the timer
+  timestamp.get_timestamp(&tsc_end_buf);
+  timestamp.disable_tsc();
+
+  var lo_ : u16 = 0;
+  var hi_ : u16 = 0;
+  var word : u32 = 0;
+
+  lo_ = tsc_start_buf[0];
+  hi_ = tsc_start_buf[1];
+  timer_buf[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tsc_start_buf[2];
+  hi_ = tsc_end_buf[0];
+  timer_buf[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tsc_end_buf[1];
+  hi_ = tsc_end_buf[2];
+  timer_buf[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  // the user must unblock cmd color for every PE
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  @bind_task(f_exit, EXIT);
+  @bind_task(send_east_ctrl_wlt, send_east_ctrl);
+  @bind_task(send_west_ctrl_wlt, send_west_ctrl);
+  @bind_task(recv_east_task, recv_east);
+  @bind_task(recv_west_task, recv_west);
+
+  @block(fab_east_color);
+  @block(fab_west_color);
+
+  @block(EXIT);
+
+  @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(ptr_arr2, "arr2");
+  @export_symbol(ptr_timer_buf, "maxmin_time");
+  @export_symbol(main_fn);
+  @rpc(LAUNCH);
+}
