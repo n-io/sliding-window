@@ -77,7 +77,7 @@ fn main_fn() void {
   }
 }
 
-const ctrl = [1]u32 { comptime switches.ctrl(switches.switchCommands()) };
+const ctrl = [1]u32 { comptime switches.ctrl(switches.switchCommands(num_pes)) };
 const ctrl_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> ctrl[i] });
 
 task send_east_ctrl_wlt() void {

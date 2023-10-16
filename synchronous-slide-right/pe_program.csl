@@ -40,8 +40,8 @@ var arr1 = @zeros([num_elems]f32);
 const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
 var ptr_arr1 : [*]f32 = &arr1;
 
-const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = @get_output_queue(0) });
-const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = @get_input_queue(1) });
+const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = @get_output_queue(1) });
+const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = @get_input_queue(2) });
 
 fn main_fn() void {
   timestamp.enable_tsc();
@@ -59,14 +59,14 @@ fn main_fn() void {
   }
 }
 
-const ctrl = [1]u32 { comptime switches.ctrl(switches.switchCommands()) };
+const ctrl = [1]u32 { comptime switches.ctrl(switches.switchCommands(num_pes)) };
 
 task send_ctrl_wlt() void {
   const fabOutCtrlDsd = @get_dsd(fabout_dsd, .{
       .extent = 1,
       .control = true,
       .fabric_color = fab_east_color,
-      .output_queue = @get_output_queue(0),
+      .output_queue = @get_output_queue(1),
       });
 
   var ctrl_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> ctrl[i] });

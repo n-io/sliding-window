@@ -50,8 +50,7 @@ def main():
     with open(f"{name}/out.json", encoding="utf-8") as json_file:
         compile_data = json.load(json_file)
     
-    #kernel_width = int(compile_data["params"]["kernel_width"])
-    kernel_width=8
+    kernel_width = int(compile_data["params"]["kernel_width"])
     num_elems = int(compile_data["params"]["num_elems"])
     
     left_pe   = 0
