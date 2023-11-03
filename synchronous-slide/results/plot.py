@@ -44,16 +44,21 @@ num_elem_list = list(dict.fromkeys(df['elems_per_pe'].to_list()))
 
 # Plot bandwidth
 for kernel_width in kernel_width_list:
-  elems_per_pe = df.loc[df['kernel_width'] == kernel_width, 'elems_per_pe']
-  left_cycles = df.loc[df['kernel_width'] == kernel_width, 'left_cycles']
-  middle_cycles = df.loc[df['kernel_width'] == kernel_width, 'middle_cycles']
-  right_cycles = df.loc[df['kernel_width'] == kernel_width, 'right_cycles']
+  # !!! HARDCODING TO PLOT JUST THE POWERS OF TWO
+  if kernel_width in [8, 16, 32]:
+     elems_per_pe = df.loc[df['kernel_width'] == kernel_width, 'elems_per_pe']
+     left_cycles = df.loc[df['kernel_width'] == kernel_width, 'left_cycles']
+     middle_cycles = df.loc[df['kernel_width'] == kernel_width, 'middle_cycles']
+     right_cycles = df.loc[df['kernel_width'] == kernel_width, 'right_cycles']
 
-  label_root = str(kernel_width) + ' PEs, '
-  plt.plot(elems_per_pe*kernel_width, left_cycles, '-o', label=label_root + 'left')
-  plt.plot(elems_per_pe*kernel_width, middle_cycles, '-o', label=label_root + 'middle')
-  plt.plot(elems_per_pe*kernel_width, right_cycles, '-o', label=label_root + 'right')
-  plt.plot(elems_per_pe*kernel_width, right_cycles, '-o', label=label_root + 'right')
+     label_root = str(kernel_width) + ' PEs, '
+
+     # !!! COMMENTING OUT OTHERS AND ONLY PLOTTING RIGHT SINCE IT'S THE WORST
+     plt.plot(elems_per_pe*kernel_width, right_cycles, '-o', label=str(kernel_width) + ' PEs')
+
+     #plt.plot(elems_per_pe*kernel_width, left_cycles, '-o', label=label_root + 'left')
+     #plt.plot(elems_per_pe*kernel_width, middle_cycles, '-o', label=label_root + 'middle')
+     #plt.plot(elems_per_pe*kernel_width, right_cycles, '-o', label=label_root + 'right')
 
 plt.legend(bbox_to_anchor=(1.05, 1.05))
 plt.grid()
@@ -71,11 +76,20 @@ else:
 
 # Plot cycles per element
 plt.clf()
-plt.plot(elems_per_pe*kernel_width, right_cycles / (elems_per_pe*kernel_width), '-o')
+for kernel_width in kernel_width_list:
+  # !!! HARDCODING TO PLOT JUST THE POWERS OF TWO
+  if kernel_width in [8, 16, 32]:
+    elems_per_pe = df.loc[df['kernel_width'] == kernel_width, 'elems_per_pe']
+    right_cycles = df.loc[df['kernel_width'] == kernel_width, 'right_cycles']
+
+    label_root = str(kernel_width) + ' PEs'
+    plt.plot(elems_per_pe*kernel_width, right_cycles / (elems_per_pe*kernel_width), '-o', label=label_root)
+
+plt.legend(bbox_to_anchor=(1.05, 1.05))
 plt.grid()
 plt.xlabel('Num Elems')
 plt.ylabel('Cycles per element')
-plt.yticks([1, 1.5, 2, 2.5, 3, 3.5, 4])
+plt.yticks([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4])
 
 if not cs2:
   plt.title("Worst Cycles per Element, Simulation")
