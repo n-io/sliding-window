@@ -10,18 +10,14 @@ param fab_west_color: color;
 
 param memcpy_params: comptime_struct; // Struct containing memcpy params
 
-const LAUNCH: color = @get_color(8);
-const EXIT: color = @get_color(9);
-const send_west_ctrl: color = @get_color(10);
-const send_east_ctrl: color = @get_color(11);
-const recv_west: color = @get_color(12);
-const recv_east: color = @get_color(13);
+const EXIT:           local_task_id = @get_local_task_id(9);
+const send_west_ctrl: local_task_id = @get_local_task_id(10);
+const send_east_ctrl: local_task_id = @get_local_task_id(11);
+const recv_west:      local_task_id = @get_local_task_id(12);
+const recv_east:      local_task_id = @get_local_task_id(13);
 
 // This module is needed for memcpy infrastructure
-const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpy_params, .{
-     .LAUNCH=LAUNCH,
-     .data_type=f32
-}));
+const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
 const switches = @import_module("switches.csl");
 
@@ -145,11 +141,11 @@ task f_exit() void {
 }
 
 comptime {
-  @bind_task(f_exit, EXIT);
-  @bind_task(send_east_ctrl_wlt, send_east_ctrl);
-  @bind_task(send_west_ctrl_wlt, send_west_ctrl);
-  @bind_task(recv_east_task, recv_east);
-  @bind_task(recv_west_task, recv_west);
+  @bind_local_task(f_exit, EXIT);
+  @bind_local_task(send_east_ctrl_wlt, send_east_ctrl);
+  @bind_local_task(send_west_ctrl_wlt, send_west_ctrl);
+  @bind_local_task(recv_east_task, recv_east);
+  @bind_local_task(recv_west_task, recv_west);
 
   @block(fab_east_color);
   @block(fab_west_color);
@@ -161,5 +157,5 @@ comptime {
   @export_symbol(ptr_arr2, "arr2");
   @export_symbol(ptr_timer_buf, "maxmin_time");
   @export_symbol(main_fn);
-  @rpc(LAUNCH);
+  @rpc(@get_data_task_id(sys_mod.LAUNCH));
 }
