@@ -147,9 +147,6 @@ comptime {
   @bind_local_task(recv_east_task, recv_east);
   @bind_local_task(recv_west_task, recv_west);
 
-  @block(fab_east_color);
-  @block(fab_west_color);
-
   @block(EXIT);
 
   @export_symbol(ptr_arr0, "arr0");

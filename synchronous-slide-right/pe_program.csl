@@ -108,9 +108,6 @@ comptime {
   @bind_local_task(send_ctrl_wlt, send_ctrl);
   @bind_local_task(recv_task, recv);
 
-  @block(fab_east_color);
-  @block(fab_west_color);
-
   @export_symbol(ptr_arr0, "arr0");
   @export_symbol(ptr_arr1, "arr1");
   @export_symbol(ptr_timer_buf, "maxmin_time");
