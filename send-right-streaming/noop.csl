@@ -1,9 +1,0 @@
-param MEMCPYD2H_DATA_1: color;       // Color used for D2H memcpy transfer
-param MEMCPYH2D_DATA_1: color;       // Color used for H2D memcpy transfer
-param memcpyParams: comptime_struct; // Struct containing memcpy params
-
-// This module is needed for memcpy infrastructure
-const sys_mod = @import_module("<memcpy_multi/memcpy>", @concat_structs(memcpyParams, .{
-     .MEMCPYD2H_1=MEMCPYD2H_DATA_1,
-     .MEMCPYH2D_1=MEMCPYH2D_DATA_1
-}));

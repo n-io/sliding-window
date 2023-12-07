@@ -68,7 +68,7 @@ def main():
                       order=memcpy_order, nonblock=False)
     
     print("Launch kernel...")
-    runner.call("main_fn", [], nonblock=False)
+    runner.launch("main_fn", nonblock=False)
     
     # Copy back data in arr1 from device
     arr1_out_data = np.zeros([kernel_width*num_elems], dtype=np.float32)

@@ -87,7 +87,6 @@ def main():
 
   for kernel_width in [8, 12, 16, 20, 24, 28, 32]:
     for num_elems in range(1,501,10):
-    #for num_elems in range(271,501,10):
       compile_and_run(
         kernel_width,
         num_elems,

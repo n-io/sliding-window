@@ -8,7 +8,7 @@ const num_slide = num_pes / 4;
 param fab_east_color: color;
 param fab_west_color: color;
 
-param memcpy_params: comptime_struct; // Struct containing memcpy params
+param memcpy_params: comptime_struct;
 
 const EXIT:      local_task_id = @get_local_task_id(9);
 const send_ctrl: local_task_id = @get_local_task_id(10);

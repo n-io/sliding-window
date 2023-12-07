@@ -49,24 +49,3 @@ fn switchCommands(kernel_width: u16) [8]u16 {
   cmds[kernel_width/4-1] = sw_adv;
   return cmds;
 }
-
-// switch commands for 8 PEs
-// current PE is advanced from |- to --
-// next PE is advanced from -- to -|
-// other PEs don't matter
-fn switchCommands_8() [8]u16 {
-  var cmds = @constants([8]u16, sw_nop);
-  cmds[0] = sw_adv;
-  cmds[1] = sw_adv;
-  return cmds;
-}
-
-// switch commands for 16 PEs
-fn switchCommands_16() [8]u16 {
-  var cmds = @constants([8]u16, sw_nop);
-  cmds[0] = sw_adv;
-  cmds[1] = sw_nop;
-  cmds[2] = sw_nop;
-  cmds[3] = sw_adv;
-  return cmds;
-}
