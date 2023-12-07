@@ -4,6 +4,8 @@ Synchronous Slide Tests
 This repo contains several sample programs building up primitives
 for a synchronous slide FFT.
 
+This code is compatible with Cerebras SDK 1.0.0.
+
 synchronous-slide-right
 -----------------------
 Constructs a program with a row of ``kernel_width`` PEs, where ``kernel_width``
