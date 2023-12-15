@@ -6,6 +6,9 @@ for a synchronous slide FFT.
 
 This code is compatible with Cerebras SDK 1.0.0.
 
+Register for access to the Cerebras SDK `here <https://www.cerebras.net/homepage-landing/developers/sdk-request/>`_.
+Documentation for the SDK can be found `here <https://sdk.cerebras.net>`_.
+
 synchronous-slide-right
 -----------------------
 Constructs a program with a row of ``kernel_width`` PEs, where ``kernel_width``
