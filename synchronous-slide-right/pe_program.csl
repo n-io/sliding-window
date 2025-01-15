@@ -14,6 +14,9 @@ const EXIT:      local_task_id = @get_local_task_id(9);
 const send_ctrl: local_task_id = @get_local_task_id(10);
 const recv:      local_task_id = @get_local_task_id(11);
 
+const iq:        input_queue = @get_input_queue(2);
+const oq:        output_queue = @get_output_queue(1);
+
 // This module is needed for memcpy infrastructure
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
@@ -36,8 +39,8 @@ var arr1 = @zeros([num_elems]f32);
 const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
 var ptr_arr1 : [*]f32 = &arr1;
 
-const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = @get_output_queue(1) });
-const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = @get_input_queue(2) });
+const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = oq });
+const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = iq });
 
 fn main_fn() void {
   timestamp.enable_tsc();
@@ -62,7 +65,7 @@ task send_ctrl_wlt() void {
       .extent = 1,
       .control = true,
       .fabric_color = fab_east_color,
-      .output_queue = @get_output_queue(1),
+      .output_queue = oq,
       });
 
   var ctrl_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> ctrl[i] });
@@ -112,5 +115,9 @@ comptime {
   @export_symbol(ptr_arr1, "arr1");
   @export_symbol(ptr_timer_buf, "maxmin_time");
   @export_symbol(main_fn);
-  @rpc(@get_data_task_id(sys_mod.LAUNCH));
+
+  if (@is_arch("wse3")) {
+    @initialize_queue(iq, .{ .color = fab_east_color });
+    @initialize_queue(oq, .{ .color = fab_east_color });
+  }
 }

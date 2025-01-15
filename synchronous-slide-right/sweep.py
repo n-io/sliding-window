@@ -40,7 +40,7 @@ def cslc_compile(
   args.append("--fabric-offsets=4,1")
   args.append(f"--params=kernel_width:{kernel_width},num_elems:{num_elems}")
   args.append(f"-o={name}")
-  args.append("--arch=wse2")
+  args.append("--arch=wse3")
   args.append("--memcpy")
   args.append("--channels=1")
   print(f"subprocess.check_call(args = {args}")

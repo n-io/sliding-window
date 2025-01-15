@@ -1,17 +1,14 @@
 param kernel_width: u16;
 param num_elems: u16;
 
-const LAUNCH: color = @get_color(8);
-
 // Instantiate memcpy infrastructure
 const memcpy = @import_module("<memcpy/get_params>", .{
   .width = kernel_width,
-  .height = 1,
-  .LAUNCH = LAUNCH
+  .height = 1
   });
 
-const fab_east_color = @get_color(14);
-const fab_west_color = @get_color(15);
+const fab_east_color = @get_color(2);
+const fab_west_color = @get_color(3);
 
 layout {
   // Use a single row of kernel_width PEs (columns=kernel_width, rows=1)
@@ -27,8 +24,8 @@ layout {
       .fab_west_color = fab_west_color
     });
 
-    const default_route = .{ .rx = .{ RAMP }, .tx = .{ EAST }, .pop_mode = .{ .always_pop = true } };
-    const switch_pos = .{ .pos1 = .{ .rx = WEST }, .pos2 = .{ .tx = RAMP } };
+    const default_route = .{ .rx = .{ RAMP }, .tx = .{ EAST } };
+    const switch_pos = .{ .pos1 = .{ .rx = WEST }, .pos2 = .{ .tx = RAMP }, .pop_mode = .{ .always_pop = true } };
     const switch_0 = @concat_structs(switch_pos, .{ .current_switch_pos = 0 }); // RAMP --> EAST
     const switch_1 = @concat_structs(switch_pos, .{ .current_switch_pos = 1 }); // WEST --> EAST
     const switch_2 = @concat_structs(switch_pos, .{ .current_switch_pos = 2 }); // RAMP --> WEST
