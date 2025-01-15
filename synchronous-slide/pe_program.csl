@@ -42,11 +42,16 @@ var arr2 = @zeros([num_elems]f32);
 const arr2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr2[i] });
 var ptr_arr2 : [*]f32 = &arr2;
 
-const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = @get_output_queue(2) });
-const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = @get_input_queue(3) });
+const send_east_q : output_queue= @get_output_queue(2);
+const recv_west_q : input_queue= @get_input_queue(3);
+const send_west_q : output_queue= @get_output_queue(4);
+const recv_east_q : input_queue= @get_input_queue(5);
 
-const send_west_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_west_color, .extent = num_elems, .output_queue = @get_output_queue(4) });
-const recv_east_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_west_color, .extent = num_elems, .input_queue = @get_input_queue(5) });
+const send_east_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_east_color, .extent = num_elems, .output_queue = send_east_q });
+const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_east_color, .extent = num_elems, .input_queue = recv_west_q });
+
+const send_west_dsd = @get_dsd(fabout_dsd, .{.fabric_color = fab_west_color, .extent = num_elems, .output_queue = send_west_q });
+const recv_east_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = fab_west_color, .extent = num_elems, .input_queue = recv_east_q });
 
 fn main_fn() void {
   timestamp.enable_tsc();
@@ -81,7 +86,7 @@ task send_east_ctrl_wlt() void {
       .extent = 1,
       .control = true,
       .fabric_color = fab_east_color,
-      .output_queue = @get_output_queue(2),
+      .output_queue = send_east_q,
       });
 
   @mov32(fabOutCtrlDsd, ctrl_dsd, .{ .async = true, .activate = recv_west});
@@ -92,7 +97,7 @@ task send_west_ctrl_wlt() void {
       .extent = 1,
       .control = true,
       .fabric_color = fab_west_color,
-      .output_queue = @get_output_queue(4),
+      .output_queue = send_west_q,
       });
 
   @mov32(fabOutCtrlDsd, ctrl_dsd, .{ .async = true, .activate = recv_east});
@@ -154,5 +159,11 @@ comptime {
   @export_symbol(ptr_arr2, "arr2");
   @export_symbol(ptr_timer_buf, "maxmin_time");
   @export_symbol(main_fn);
-  @rpc(@get_data_task_id(sys_mod.LAUNCH));
+
+  if (@is_arch("wse3")) {
+    @initialize_queue(send_east_q, .{ .color = fab_east_color });
+    @initialize_queue(recv_west_q, .{ .color = fab_east_color });
+    @initialize_queue(send_west_q, .{ .color = fab_west_color });
+    @initialize_queue(recv_east_q, .{ .color = fab_west_color });
+  }
 }
