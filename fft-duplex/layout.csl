@@ -1,0 +1,132 @@
+param kernel_width: u16;
+param num_elems: u16;
+const num_slide = kernel_width / 4;
+
+// Instantiate memcpy infrastructure
+const memcpy = @import_module("<memcpy/get_params>", .{
+  .width = kernel_width,
+  .height = 1
+  });
+
+const outer_right_color = @get_color(2);
+const inner_right_color = @get_color(3);
+const outer_left_color = @get_color(4);
+const inner_left_color = @get_color(5);
+const dummy1 = @get_color(6);
+const dummy2 = @get_color(7);
+
+const directions = @import_module("<directions>");
+
+fn route(idx: u16, dir: direction) comptime_struct {
+  // `dir` is the send direction, `flip(dir)` is the receive direction
+  if (idx == 0) {
+    // always send
+    return .{
+      .routes = .{ .rx = .{ RAMP }, .tx = .{ dir } },
+      .switches = .{
+        .pos1 = .{ .rx = RAMP },
+        .pop_mode = .{ .always_pop = true },
+        .ring_mode = true
+      }
+    };
+  } else if (idx < num_slide) {
+    // send -> fwd
+    return .{
+      .routes = .{ .rx = .{ RAMP }, .tx = .{ dir } },
+      .switches = .{
+        .pos1 = .{ .rx = directions.flip(dir) },
+        .pop_mode = .{ .always_pop = true },
+        .ring_mode = true
+      }
+    };
+  } else if (idx < 2*num_slide) {
+    // send -> fwd -> recv
+    return .{
+      .routes = .{ .rx = .{ RAMP }, .tx = .{ dir } },
+      .switches = .{
+        .pos1 = .{ .rx = directions.flip(dir) },
+        .pos2 = .{ .tx = RAMP },
+        .pop_mode = .{ .always_pop = true },
+        .ring_mode = true,
+        .current_switch_pos = if (idx == 2*num_slide-1) 2 else 1
+      }
+    };
+  } else if (idx < 3*num_slide - 1) {
+    // fwd -> recv
+    return .{
+      .routes = .{ .rx = .{ directions.flip(dir) }, .tx = .{ dir } },
+      .switches = .{
+        .pos1 = .{ .tx = RAMP },
+        .pop_mode = .{ .always_pop = true },
+        .ring_mode = true
+      }
+    };
+  } else {
+    // always recv
+    return .{
+      .routes = .{ .rx = .{ directions.flip(dir) }, .tx = .{ RAMP } },
+      .switches = .{
+        .pos1 = .{ .rx = directions.flip(dir) },
+        .pop_mode = .{ .always_pop = true },
+        .ring_mode = true
+      }
+    };
+  }
+}
+
+layout {
+  @comptime_assert(kernel_width % 4 == 0, "kernel_width must be a multiple of 4");
+  // Use a single row of kernel_width PEs (columns=kernel_width, rows=1)
+  @set_rectangle(kernel_width, 1);
+
+  var slide_color : color = dummy1;      // color of the initial send
+  var west_east_color : color = dummy1;  // (only needed for compute PEs)
+  var east_west_color : color = dummy1;  // (only needed for compute PEs)
+  var unslide_color : color = dummy1;    // color of the final receive
+
+  for (@range(u16, kernel_width)) |x| {
+    if (x < num_slide) {
+      slide_color = outer_right_color;
+      west_east_color = dummy1;
+      east_west_color = dummy2;
+      unslide_color = inner_left_color;
+    } else if (x < 2*num_slide) {
+      slide_color = inner_right_color;
+      west_east_color = outer_right_color;
+      east_west_color = inner_left_color;
+      unslide_color = outer_left_color;
+    } else if (x < 3*num_slide) {
+      slide_color = inner_left_color;
+      west_east_color = inner_right_color;
+      east_west_color = outer_left_color;
+      unslide_color = outer_right_color;
+    } else {
+      slide_color = outer_left_color;
+      west_east_color = dummy1;
+      east_west_color = dummy2;
+      unslide_color = inner_right_color;
+    }
+    @set_tile_code(x, 0, "pe_program.csl", .{
+      .memcpy_params = memcpy.get_params(x),
+      .num_elems = num_elems,
+      .num_pes = kernel_width,
+      .pe_id = x,
+      .slide_color = slide_color,
+      .west_east_color = west_east_color,
+      .east_west_color = east_west_color,
+      .unslide_color = unslide_color,
+    });
+
+    @set_color_config(x, 0, outer_right_color, route(x, EAST));
+    @set_color_config(x, 0, inner_right_color, route(if (x >= num_slide) (x - num_slide) else 0, EAST));
+    @set_color_config(x, 0, outer_left_color, route(kernel_width-1-x, WEST));
+    @set_color_config(x, 0, inner_left_color, route(if (x < kernel_width-num_slide) kernel_width-1-num_slide-x else 0, WEST));
+
+  }
+
+  @export_name("arr0", [*]f32, true);
+  @export_name("arr1", [*]f32, true);
+  @export_name("arr2", [*]f32, true);
+  @export_name("maxmin_time", [*]f32, true);
+  @export_name("main_fn", fn()void);
+}

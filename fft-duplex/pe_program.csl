@@ -1,0 +1,170 @@
+param num_elems: u16;
+param num_pes: u16;
+param pe_id: u16;
+
+const half_pes = num_pes / 2;
+const num_slide = num_pes / 4;
+
+param slide_color : color;
+param west_east_color : color;
+param east_west_color : color;
+param unslide_color : color;
+
+const slide_queue = @get_output_queue(2);
+//const unslide_queue = @get_input_queue(5);
+const west_east_queue_recv = @get_input_queue(3);
+const east_west_queue_recv = @get_input_queue(4);
+
+
+param memcpy_params: comptime_struct;
+
+const EXIT:           local_task_id = @get_local_task_id(9);
+const slide_ctrl: local_task_id = @get_local_task_id(10);
+const compute:        local_task_id = @get_local_task_id(16);
+const unslide_recv: local_task_id = @get_local_task_id(17);
+
+// This module is needed for memcpy infrastructure
+const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
+
+const switches = @import_module("switches.csl");
+//const simprint = @import_module("<simprint>", .{ .enable = true });
+
+
+// Timers
+const timestamp = @import_module("<time>");
+var tsc_end_buf = @zeros([timestamp.tsc_size_words]u16);
+var tsc_start_buf = @zeros([timestamp.tsc_size_words]u16);
+
+var timer_buf = @zeros([3]f32);
+var ptr_timer_buf : [*]f32 = &timer_buf;
+
+// Arrays for sliding data across fabric
+var arr0 = @zeros([num_elems]f32);
+const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
+var ptr_arr0 : [*]f32 = &arr0;
+
+var arr1 = @zeros([num_elems]f32);
+const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
+var ptr_arr1 : [*]f32 = &arr1;
+
+var arr2 = @zeros([num_elems]f32);
+const arr2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr2[i] });
+var ptr_arr2 : [*]f32 = &arr2;
+
+const recv_west_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = west_east_color, .extent = num_elems, .input_queue = west_east_queue_recv, .simd_mode = .{ .simd_32_or_64 = true } });
+const recv_east_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = east_west_color, .extent = num_elems, .input_queue = east_west_queue_recv, .simd_mode = .{ .simd_32_or_64 = true } });
+
+const slide_dsd = @get_dsd(fabout_dsd, .{.fabric_color = slide_color, .extent = num_elems, .output_queue = slide_queue, .simd_mode = .{ .simd_32_or_64 = true } });
+
+// preparing for the unslide op needs an additional adv_recv ctrl wavelet to advance the current receiver (as well as the next receiver as below)
+const ctrl_wlt_count = comptime switches.pack_count(               switches.sw_adv, 0, switches.sw_adv, num_slide-1); // adv_0  adv_recv-1
+const ctrl_wlt       = comptime switches.pack([ctrl_wlt_count]u32, switches.sw_adv, 0, switches.sw_adv, num_slide-1);
+
+
+fn main_fn() void {
+  const addr0 : u16 = 0x7c80 + @as(u16, @get_int(slide_color) * 4);
+  @set_config(addr0, @get_config(addr0) | (0b1 << 15));
+  const addr1 : u16 = 0x7c80 + @as(u16, @get_int(west_east_color) * 4);
+  @set_config(addr1, @get_config(addr1) | (0b1 << 15));
+  const addr2 : u16 = 0x7c80 + @as(u16, @get_int(east_west_color) * 4);
+  @set_config(addr2, @get_config(addr2) | (0b1 << 15));
+//  const addr3 : u16 = 0x7c80 + @as(u16, @get_int(unslide_color) * 4);
+//  @set_config(addr3, @get_config(addr3) | (0b1 << 15));
+
+  timestamp.enable_tsc();
+  timestamp.get_timestamp(&tsc_start_buf);
+
+  @fmovs(slide_dsd, arr0_dsd, .{.async = true, .activate = slide_ctrl });
+  if (pe_id >= num_slide and pe_id < (3*num_slide)) {
+    @fmovs(arr1_dsd, recv_west_dsd, .{.async = true, .unblock = if (pe_id < half_pes) slide_ctrl else compute });
+    @fmovs(arr2_dsd, recv_east_dsd, .{.async = true, .unblock = if (pe_id < half_pes) compute else slide_ctrl });
+  }
+
+// setting priorities as follows gives a slight speedup:
+//
+//  @fmovs(slide_dsd, arr0_dsd, .{.async = true, .activate = slide_ctrl, .priority = .{ .low = true} });
+//  if (pe_id >= num_slide and pe_id < (3*num_slide)) {
+//    if (pe_id < 2*num_slide) {
+//      @fmovs(arr1_dsd, recv_west_dsd, .{.async = true, .unblock = if (pe_id < half_pes) slide_ctrl else compute, .priority = .{ .medium = true} });
+//      @fmovs(arr2_dsd, recv_east_dsd, .{.async = true, .unblock = if (pe_id < half_pes) compute else slide_ctrl, .priority = .{ .low = true} });
+//    } else {
+//      @fmovs(arr1_dsd, recv_west_dsd, .{.async = true, .unblock = if (pe_id < half_pes) slide_ctrl else compute, .priority = .{ .medium = true} });
+//      @fmovs(arr2_dsd, recv_east_dsd, .{.async = true, .unblock = if (pe_id < half_pes) compute else slide_ctrl, .priority = .{ .medium = true} });
+//    }
+//  }
+}
+
+task compute_task() void {
+  @activate(EXIT);
+}
+
+task unslide_recv_task() void {
+  @activate(EXIT);
+}
+
+task slide_ctrl_task() void {
+  const ctrl_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{ctrl_wlt_count} -> ctrl_wlt[i] });
+  const fabOutCtrlDsd = @get_dsd(fabout_dsd, .{
+    .extent = ctrl_wlt_count,
+    .control = true,
+    .fabric_color = slide_color,
+    .output_queue = slide_queue,
+  });
+
+  @mov32(fabOutCtrlDsd, ctrl_dsd, .{ .async = true, .activate = if (pe_id >= num_slide and pe_id < 3*num_slide) compute else EXIT });
+}
+
+// Activated only after all data has been received
+task f_exit() void {
+  // stop the timer
+  timestamp.get_timestamp(&tsc_end_buf);
+  timestamp.disable_tsc();
+
+  var lo_ : u16 = 0;
+  var hi_ : u16 = 0;
+  var word : u32 = 0;
+
+  lo_ = tsc_start_buf[0];
+  hi_ = tsc_start_buf[1];
+  timer_buf[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tsc_start_buf[2];
+  hi_ = tsc_end_buf[0];
+  timer_buf[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  lo_ = tsc_end_buf[1];
+  hi_ = tsc_end_buf[2];
+  timer_buf[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+  // the user must unblock cmd color for every PE
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  @bind_local_task(f_exit, EXIT);
+  @bind_local_task(slide_ctrl_task, slide_ctrl);
+  @bind_local_task(compute_task, compute);
+
+
+//  @bind_local_task(unslide_recv_task, unslide_recv);
+
+  if (pe_id >= num_slide and pe_id < 3*num_slide) {
+    @block(slide_ctrl);
+  }
+  @block(compute);
+
+  @export_symbol(ptr_arr0, "arr0");
+  @export_symbol(ptr_arr1, "arr1");
+  @export_symbol(ptr_arr2, "arr2");
+  @export_symbol(ptr_timer_buf, "maxmin_time");
+  @export_symbol(main_fn);
+
+  if (@is_arch("wse3")) {
+    @initialize_queue(slide_queue, .{ .color = slide_color });
+//    @initialize_queue(unslide_queue, .{ .color = unslide_color });
+    if (pe_id >= num_slide and pe_id < 3*num_slide) {
+      @initialize_queue(west_east_queue_recv, .{ .color = west_east_color });
+      @initialize_queue(east_west_queue_recv, .{ .color = east_west_color });
+    }
+  }
+}

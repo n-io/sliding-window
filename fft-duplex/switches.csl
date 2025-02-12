@@ -1,0 +1,81 @@
+// These are switch commands that tell the receiving router to either do nothing
+// or advance the switch position.
+const sw_nop = 0;
+const sw_adv = 1;
+const sw_reset = 2;
+
+fn ctrl(ttl: [4]u16, cmds: [4]u16) u32 {
+  // Tell the router to not forward control wavelets to the PE.
+  const ceFilter = true;
+
+  // Color 31 is special.  It is the hardware's way of saying null color.
+  const colorToActivate = 31;
+
+  var result: u32 = 0;
+  result |= (colorToActivate & 0x1f) << 16;
+  result |= @as(u32, ceFilter) << 21;
+
+  const cmd0 = (@as(u32, ttl[0] & 0xf) << 2) | @as(u32, cmds[0] & 0x3);
+  const cmd1 = (@as(u32, ttl[1] & 0xf) << 2) | @as(u32, cmds[1] & 0x3);
+  const cmd2 = (@as(u32, ttl[2] & 0xf) << 2) | @as(u32, cmds[2] & 0x3);
+  const cmd3 = (@as(u32, ttl[3] & 0xf) << 2) | @as(u32, cmds[3] & 0x3);
+
+  result |= @as(u32, cmd2 & 0b100) >> 2;
+  result |= @as(u32, cmd3 & 0b111) << 1;
+  result |= @as(u32, cmd0 & 0b111000) << (4-3);
+  result |= @as(u32, cmd1 & 0b111000) << (7-3);
+  result |= @as(u32, cmd2 & 0b111000) << (10-3);
+  result |= @as(u32, cmd3 & 0b111000) << (13-3);
+  result |= @as(u32, cmd0 & 0b111) << 22;
+  result |= @as(u32, cmd1 & 0b111) << 25;
+  result |= @as(u32, cmd2 & 0b11) << 28;
+
+  return result;
+}
+
+fn pack_count(cmd0: u16, dist0: u16, cmd1: u16, dist1: u16) comptime_int {
+  const near_cmd = if (dist0 < dist1) cmd0 else cmd1;
+  const near_dist = if (dist0 < dist1) dist0 else dist1;
+  const far_cmd = if (dist0 < dist1) cmd1 else cmd0;
+  const far_dist = if (dist0 < dist1) dist1 else dist0;
+  const delta_dist = far_dist - near_dist - 1;
+  const is_single_wavelet = (dist0 != dist1) and (dist0 / 16 + delta_dist / 16 + 2) <= 4;
+  return if (is_single_wavelet) 1 else 2;
+}
+
+fn pack(comptime T: type, cmd0: u16, dist0: u16, cmd1: u16, dist1: u16) T {
+  const near_cmd = if (dist0 < dist1) cmd0 else cmd1;
+  const near_dist = if (dist0 < dist1) dist0 else dist1;
+  const far_cmd = if (dist0 < dist1) cmd1 else cmd0;
+  const far_dist = if (dist0 < dist1) dist1 else dist0;
+  const delta_dist = far_dist - near_dist - 1;
+  const is_single_wavelet = (dist0 != dist1) and (dist0 / 16 + delta_dist / 16 + 2) <= 4;
+  if (is_single_wavelet) {
+    var ttl = [4]u16{0xf, 0xf, 0xf, 0xf};
+    var cmds = [4]u16{sw_nop, sw_nop, sw_nop, sw_nop};
+    cmds[near_dist / 16] = near_cmd;
+    ttl[near_dist / 16] = near_dist % 16;
+    cmds[near_dist / 16 + 1 + delta_dist / 16] = far_cmd;
+    ttl[near_dist / 16 + 1 + delta_dist / 16] = delta_dist % 16;
+    for (@range(u16, near_dist / 16 + delta_dist / 16 + 2, 4, 1)) | i | {
+      ttl[i] = 0;
+    }
+    return [1]u32{ ctrl(ttl, cmds) };
+  } else {
+    var t0 = [4]u16{0xf, 0xf, 0xf, 0xf};
+    var c0 = [4]u16{sw_nop, sw_nop, sw_nop, sw_nop};
+    var t1 = [4]u16{0xf, 0xf, 0xf, 0xf};
+    var c1 = [4]u16{sw_nop, sw_nop, sw_nop, sw_nop};
+    c0[near_dist / 16] = near_cmd;
+    t0[near_dist / 16] = near_dist % 16;
+    c1[far_dist / 16] = far_cmd;
+    t1[far_dist / 16] = far_dist % 16;
+    for (@range(u16, near_dist / 16 + 1, 4, 1)) | i | {
+      t0[i] = 0;
+    }
+    for (@range(u16, far_dist / 16 + 1, 4, 1)) | i | {
+      t1[i] = 0;
+    }
+    return [2]u32{ ctrl(t1, c1), ctrl(t0, c0) };
+  }
+}
