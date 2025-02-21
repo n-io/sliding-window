@@ -1,0 +1,172 @@
+param num_elems: u16;
+param pe_id: u16;
+param is_first: bool;
+param is_last: bool;
+
+param send_color : color;
+param recv_color : color;
+
+param memcpy_params: comptime_struct;
+
+const T: type = f32;
+
+const send_queue = @get_output_queue(2);
+const recv_queue = @get_input_queue(3);
+const recv_dsd = @get_dsd(fabin_dsd,  .{.fabric_color = recv_color, .extent = num_elems, .input_queue = recv_queue, .simd_mode = .{ .simd_64 = true } });
+const send_dsd = @get_dsd(fabout_dsd, .{.fabric_color = send_color, .extent = num_elems, .output_queue = send_queue, .simd_mode = .{ .simd_64 = true } });
+
+const EXIT: local_task_id = @get_local_task_id(9);
+
+const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
+const dsd_ops = @import_module("<dsd_ops>");
+
+// Timers
+const timestamp = @import_module("<time>");
+var tsc_end_buf = @zeros([timestamp.tsc_size_words]u16);
+var tsc_start_buf = @zeros([timestamp.tsc_size_words]u16);
+var timer_buf = @zeros([3]f32);
+var ptr_timer_buf : [*]f32 = &timer_buf;
+
+// Arrays for sliding data across fabric
+//var arr0: [num_elems]T align(64) = @zeros([num_elems]T);
+var arr0: [num_elems]T = @zeros([num_elems]T);
+var arr1: [num_elems]T = @zeros([num_elems]T);
+const arr0_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr0[i] });
+const arr1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{num_elems} -> arr1[i] });
+//const fifo = @allocate_fifo(arr1, .{.activate_push = EXIT});
+var ptr_arr0 : [*]T = &arr0;
+var ptr_arr1 : [*]T = &arr1;
+
+//const dsr_arr0_dst = @get_dsr(dsr_dest, 0);
+//const dsr_arr0_src0 = @get_dsr(dsr_src0, 0);
+//const dsr_arr0_src1 = @get_dsr(dsr_src1, 0);
+//const dsr_arr1_dst = @get_dsr(dsr_dest, 1);
+//const dsr_arr1_src0 = @get_dsr(dsr_src0, 1);
+//const dsr_arr1_src1 = @get_dsr(dsr_src1, 1);
+const recv_dsr = @get_dsr(dsr_src1, 1);
+const store_dsr = @get_dsr(dsr_dest, 1);
+const send_dsr = @get_dsr(dsr_dest, 2);
+const load_dsr = @get_dsr(dsr_src1, 2);
+//const read_dsr = @get_dsr(dsr_src0, 0);
+//const send_dsr = @get_dsr(dsr_dest, 0);
+const config = @import_module("<tile_config>");
+//const task_priority = config.task_priority;
+const mt_priority = config.main_thread_priority;
+
+//const simprint = @import_module("<simprint>", .{ .enable = true });
+
+comptime {
+    @load_to_dsr(recv_dsr, recv_dsd, .{.async = true, .unblock = EXIT });
+    @load_to_dsr(store_dsr, arr1_dsd);
+    @load_to_dsr(send_dsr, send_dsd, .{.async = true, .activate = EXIT });
+    @load_to_dsr(load_dsr, arr0_dsd);
+//    @set_empty_queue_handler(send_empty, send_queue);
+//    @set_empty_queue_handler(recv_empty, recv_queue);
+
+}
+
+fn recv_empty() void {
+//simprint.fmt_with_coords("recv_empty", .{});
+//  task_priority.clear_task_priority(recv_queue);
+  mt_priority.update_main_thread_priority(mt_priority.level.MEDIUM_LOW);
+}
+
+fn send_empty() void {
+//simprint.fmt_with_coords("send_empty", .{});
+//  task_priority.set_task_priority(recv_queue);
+mt_priority.update_main_thread_priority(mt_priority.level.MEDIUM_HIGH);
+}
+
+//const config = @import_module("<tile_config>");
+//const mt_priority = config.main_thread_priority;
+
+
+// main_fn starts timer
+// send -> activate EXIT
+// recv -> unblock EXIT
+// EXIT ends timer
+
+fn main_fn() void {
+//    @set_fifo_write_length(fifo, 2);
+//    @set_fifo_read_length(fifo, num_elems);
+//    mt_priority.update_main_thread_priority(mt_priority.level.HIGH);
+//    const addr0 : u16 = 0x7b80 + @as(u16, @get_int(send_queue));
+//    @set_config(addr0, @get_config(addr0) | 0b1000000000);
+//simprint.fmt_with_coords("start {b}", .{@get_config(addr0) | 0b1000000000});
+
+
+    timestamp.enable_tsc();
+    timestamp.get_timestamp(&tsc_start_buf);
+
+    @queue_flush(send_queue);
+    @queue_flush(recv_queue);
+    if (!is_last) {
+        dsd_ops.mov(T, send_dsd, arr0_dsd, .{.async = true, .activate = EXIT, .priority = .{ .medium = true} });
+//        dsd_ops.mov(T, send_dsr, load_dsr, .{.async = true, .activate = EXIT, .priority = .{ .high = true} });
+    }
+    if (!is_first) {
+//        dsd_ops.mov(T, store_dsr, recv_dsr, .{.async = true, .unblock = EXIT, .priority = .{ .high = true}});
+
+
+//        dsd_ops.mov(T, fifo, recv_dsd, .{.async = true, .unblock = EXIT });
+//        dsd_ops.mov(T, store_dsr, recv_dsr, .{.async = true, .unblock = EXIT, .priority = .{ .low = true} });
+
+//        dsd_ops.mov(T, arr1_dsd, recv_dsd, .{.async = true, .unblock = EXIT, .priority = .{ .medium = true} });
+
+        dsd_ops.mov(T, arr1_dsd, recv_dsd, .{});
+        @unblock(EXIT);
+    }
+}
+//var i: u16 = 0;
+//task recv_task(data: f32) void {
+//    arr1[i] = data;
+//    i+=1;
+//    if (i == num_elems) {
+//        @unblock(EXIT);
+//    }
+//    dsd_ops.mov(T, fifo, data, .{});
+//}
+
+task f_exit() void {
+    timestamp.get_timestamp(&tsc_end_buf);
+    timestamp.disable_tsc();
+
+    var lo_ : u16 = 0;
+    var hi_ : u16 = 0;
+    var word : u32 = 0;
+
+    lo_ = tsc_start_buf[0];
+    hi_ = tsc_start_buf[1];
+    timer_buf[0] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+    lo_ = tsc_start_buf[2];
+    hi_ = tsc_end_buf[0];
+    timer_buf[1] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+    lo_ = tsc_end_buf[1];
+    hi_ = tsc_end_buf[2];
+    timer_buf[2] = @bitcast(f32, (@as(u32,hi_) << @as(u16,16)) | @as(u32, lo_) );
+
+    sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+    @bind_local_task(f_exit, EXIT);
+    if (!is_first) {
+        @block(EXIT);
+    }
+    if (is_last) {
+        @activate(EXIT);
+    }
+
+    @export_symbol(ptr_timer_buf, "maxmin_time");
+    @export_symbol(main_fn);
+
+    if (@is_arch("wse3")) {
+        @initialize_queue(send_queue, .{ .color = send_color });
+        @initialize_queue(recv_queue, .{ .color = recv_color });
+//        @bind_data_task(recv_task, @get_data_task_id(recv_queue));
+    } else {
+//        @bind_data_task(recv_task, @get_data_task_id(recv_color));
+    }
+}

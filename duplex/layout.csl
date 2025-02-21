@@ -1,0 +1,30 @@
+param num_elems: u16;
+param kernel_width = 3;
+
+const memcpy = @import_module("<memcpy/get_params>", .{
+    .width = kernel_width,
+    .height = 1
+});
+
+layout {
+    @set_rectangle(kernel_width, 1);
+    for (@range(u16, kernel_width)) |x| {
+        const recv_color = @get_color((x & 0b1) + 2);
+        const send_color = @get_color(((x+1) & 0b1) + 2);
+        const send_config = .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ EAST } } };
+        const recv_config = .{ .routes = .{ .rx = .{ WEST }, .tx = .{ RAMP } } };
+        @set_tile_code(x, 0, "pe_program.csl", .{
+            .memcpy_params = memcpy.get_params(x),
+            .num_elems = num_elems,
+            .pe_id = x,
+            .recv_color = recv_color,
+            .send_color = send_color,
+            .is_first = x == 0,
+            .is_last = x == kernel_width - 1,
+        });
+        @set_color_config(x, 0, recv_color, recv_config);
+        @set_color_config(x, 0, send_color, send_config);
+    }
+    @export_name("maxmin_time", [*]f32, true);
+    @export_name("main_fn", fn()void);
+}
